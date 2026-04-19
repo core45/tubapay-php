@@ -18,6 +18,8 @@ final class TokenManager
 {
     private const TOKEN_ENDPOINT = '/api/v1/partner/auth/token';
 
+    private const GRANT_TYPE = 'PARTNER_CLIENT_CREDENTIALS';
+
     public function __construct(
         private readonly ClientInterface $httpClient,
         private readonly string $clientId,
@@ -65,6 +67,7 @@ final class TokenManager
                 'json' => [
                     'clientId' => $this->clientId,
                     'clientSecret' => $this->clientSecret,
+                    'grantType' => self::GRANT_TYPE,
                 ],
                 'headers' => [
                     'Content-Type' => 'application/json',

@@ -11,6 +11,8 @@ use Core45\TubaPay\Http\TokenManager;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -45,6 +47,49 @@ final class TokenManagerTest extends TestCase
 
         $this->assertSame('test-access-token', $token);
         $this->assertTrue($manager->hasValidToken());
+    }
+
+    #[Test]
+    public function test_refresh_token_sends_partner_client_credentials_grant_type(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            new Response(200, [], json_encode([
+                'result' => [
+                    'response' => [
+                        'accessToken' => 'test-access-token',
+                        'expiresIn' => 86400,
+                    ],
+                ],
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $client = new Client(['handler' => $handlerStack]);
+        $manager = new TokenManager(
+            $client,
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage(),
+        );
+
+        $manager->refreshToken();
+
+        $this->assertCount(1, $container);
+        /** @var Request $request */
+        $request = $container[0]['request'];
+        $payload = json_decode((string) $request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame([
+            'clientId' => 'client-id',
+            'clientSecret' => 'client-secret',
+            'grantType' => 'PARTNER_CLIENT_CREDENTIALS',
+        ], $payload);
     }
 
     #[Test]

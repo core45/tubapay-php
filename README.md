@@ -70,6 +70,10 @@ $transaction = $tubapay->transactions()->createTransaction(
 header('Location: ' . $transaction->transactionLink);
 ```
 
+## Authentication
+
+The SDK authenticates with the TubaPay partner token endpoint using `clientId`, `clientSecret`, and the required `PARTNER_CLIENT_CREDENTIALS` grant type. This grant type is sent automatically when the SDK refreshes an access token.
+
 ## Webhook Handling
 
 ```php
