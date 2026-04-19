@@ -15,6 +15,8 @@ use Core45\TubaPay\Http\TubaPayClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -67,21 +69,77 @@ final class TransactionApiTest extends TestCase
     }
 
     #[Test]
-    public function test_create_transaction_throws_on_invalid_installments(): void
+    public function test_create_transaction_accepts_current_plugin_installment_numbers(): void
     {
-        $mockHandler = new MockHandler([]);
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createTransactionResponse(),
+        ]);
 
         $api = $this->createTransactionApi($mockHandler);
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('Invalid installments');
+        $transaction = $api->createTransaction(
+            customer: $this->createCustomer(),
+            item: $this->createOrderItem(1000.0),
+            installments: 22,
+            callbackUrl: 'https://example.com/webhook',
+        );
+
+        $this->assertInstanceOf(Transaction::class, $transaction);
+    }
+
+    #[Test]
+    public function test_create_transaction_sends_current_plugin_payload_shape(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createTransactionResponse(),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $httpClient = new Client(['handler' => $handlerStack]);
+        $client = new TubaPayClient(
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+            $httpClient,
+        );
+        $api = new TransactionApi($client);
 
         $api->createTransaction(
             customer: $this->createCustomer(),
             item: $this->createOrderItem(1000.0),
-            installments: 7, // Invalid - not in allowed list
+            installments: 6,
             callbackUrl: 'https://example.com/webhook',
+            externalRef: 'ORDER-123',
+            returnUrl: 'https://example.com/thanks',
+            acceptedConsents: ['RODO_BP'],
         );
+
+        $this->assertCount(2, $container);
+        /** @var Request $request */
+        $request = $container[1]['request'];
+        $payload = json_decode((string) $request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertEquals([
+            'customer' => $this->createCustomer()->toArray(),
+            'order' => [
+                'callbackUrl' => 'https://example.com/webhook',
+                'acceptedConsents' => ['RODO_BP'],
+                'item' => $this->createOrderItem(1000.0)->toArray(),
+                'externalRef' => 'ORDER-123',
+                'returnUrl' => 'https://example.com/thanks',
+            ],
+            'offer' => [
+                'installmentsNumber' => 6,
+            ],
+        ], $payload);
     }
 
     #[Test]
@@ -203,7 +261,7 @@ final class TransactionApiTest extends TestCase
     #[Test]
     public function test_valid_installment_numbers(): void
     {
-        $validInstallments = [1, 3, 6, 9, 10, 12, 18, 24, 36, 48];
+        $validInstallments = [1, 2, 3, 4, 6, 9, 10, 12, 18, 22, 23, 24, 32, 33, 34, 36, 48];
 
         foreach ($validInstallments as $installments) {
             $mockHandler = new MockHandler([
@@ -232,7 +290,7 @@ final class TransactionApiTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
             $httpClient,
         );
 

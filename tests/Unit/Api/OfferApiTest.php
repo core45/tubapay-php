@@ -15,6 +15,8 @@ use Core45\TubaPay\Http\TubaPayClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -60,6 +62,48 @@ final class OfferApiTest extends TestCase
         );
 
         $this->assertInstanceOf(Offer::class, $offer);
+    }
+
+    #[Test]
+    public function test_create_offer_sends_current_plugin_payload_shape(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createOfferResponse(),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $httpClient = new Client(['handler' => $handlerStack]);
+        $client = new TubaPayClient(
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+            $httpClient,
+        );
+        $api = new OfferApi($client);
+
+        $api->createOffer(
+            amount: 1000.0,
+            customer: $this->createCustomer(),
+            item: $this->createOrderItem(1000.0),
+            externalRef: 'ORDER-123',
+        );
+
+        $this->assertCount(2, $container);
+        /** @var Request $request */
+        $request = $container[1]['request'];
+        $payload = json_decode((string) $request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertEquals([
+            'totalValue' => 1000.0,
+            'type' => 'client',
+        ], $payload);
     }
 
     #[Test]
@@ -145,7 +189,7 @@ final class OfferApiTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
             $httpClient,
         );
 

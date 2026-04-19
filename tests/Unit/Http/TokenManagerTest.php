@@ -34,7 +34,7 @@ final class TokenManagerTest extends TestCase
         ]);
 
         $client = new Client(['handler' => HandlerStack::create($mockHandler)]);
-        $storage = new InMemoryTokenStorage();
+        $storage = new InMemoryTokenStorage;
         $manager = new TokenManager(
             $client,
             'client-id',
@@ -46,6 +46,33 @@ final class TokenManagerTest extends TestCase
         $token = $manager->getAccessToken();
 
         $this->assertSame('test-access-token', $token);
+        $this->assertTrue($manager->hasValidToken());
+    }
+
+    #[Test]
+    public function test_get_access_token_accepts_official_plugin_token_response(): void
+    {
+        $mockHandler = new MockHandler([
+            new Response(200, [], json_encode([
+                'token' => 'plugin-token',
+                'refreshToken' => 'plugin-refresh-token',
+                'expires' => date('Y-m-d H:i:s', time() + 86400),
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $client = new Client(['handler' => HandlerStack::create($mockHandler)]);
+        $storage = new InMemoryTokenStorage;
+        $manager = new TokenManager(
+            $client,
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            $storage,
+        );
+
+        $token = $manager->getAccessToken();
+
+        $this->assertSame('plugin-token', $token);
         $this->assertTrue($manager->hasValidToken());
     }
 
@@ -75,7 +102,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $manager->refreshToken();
@@ -108,7 +135,7 @@ final class TokenManagerTest extends TestCase
         ]);
 
         $client = new Client(['handler' => HandlerStack::create($mockHandler)]);
-        $storage = new InMemoryTokenStorage();
+        $storage = new InMemoryTokenStorage;
         $manager = new TokenManager(
             $client,
             'client-id',
@@ -154,7 +181,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $token1 = $manager->getAccessToken();
@@ -174,7 +201,7 @@ final class TokenManagerTest extends TestCase
             '',
             '',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $this->expectException(AuthenticationException::class);
@@ -193,7 +220,7 @@ final class TokenManagerTest extends TestCase
             '',
             'secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $this->expectException(AuthenticationException::class);
@@ -220,7 +247,7 @@ final class TokenManagerTest extends TestCase
             'wrong-id',
             'wrong-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $this->expectException(AuthenticationException::class);
@@ -243,7 +270,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $this->expectException(AuthenticationException::class);
@@ -273,7 +300,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $this->expectException(AuthenticationException::class);
@@ -303,7 +330,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $manager->getAccessToken();
@@ -335,7 +362,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Production,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $token = $manager->getAccessToken();
@@ -359,7 +386,7 @@ final class TokenManagerTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
         );
 
         $token = $manager->getAccessToken();

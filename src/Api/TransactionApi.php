@@ -28,13 +28,14 @@ final class TransactionApi
     /**
      * Create a transaction with a specific installment plan.
      *
-     * @param Customer $customer Customer details
-     * @param OrderItem $item Order item
-     * @param int $installments Number of installments (must be from offer)
-     * @param string $callbackUrl URL for webhook notifications
-     * @param string|null $externalRef Your order reference ID
-     * @param string|null $productId Specific product ID from partner offer (optional)
-     * @param string|null $returnUrl URL to redirect customer after payment completion
+     * @param  Customer  $customer  Customer details
+     * @param  OrderItem  $item  Order item
+     * @param  int  $installments  Number of installments (must be from offer)
+     * @param  string  $callbackUrl  URL for webhook notifications
+     * @param  string|null  $externalRef  Your order reference ID
+     * @param  string|null  $productId  Specific product ID from partner offer (optional)
+     * @param  string|null  $returnUrl  URL to redirect customer after payment completion
+     * @param  list<string>  $acceptedConsents  Accepted consent identifiers
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -48,6 +49,7 @@ final class TransactionApi
         ?string $externalRef = null,
         ?string $productId = null,
         ?string $returnUrl = null,
+        array $acceptedConsents = [],
     ): Transaction {
         $this->validateInstallments($installments);
         $this->validateCallbackUrl($callbackUrl);
@@ -59,7 +61,8 @@ final class TransactionApi
             $callbackUrl,
             $externalRef,
             $productId,
-            $returnUrl
+            $returnUrl,
+            $acceptedConsents
         );
 
         $response = $this->client->post(self::CREATE_TRANSACTION_PATH, $payload);
@@ -70,13 +73,14 @@ final class TransactionApi
     /**
      * Create a transaction with multiple items.
      *
-     * @param Customer $customer Customer details
-     * @param list<OrderItem> $items Order items
-     * @param int $installments Number of installments
-     * @param string $callbackUrl URL for webhook notifications
-     * @param string|null $externalRef Your order reference ID
-     * @param string|null $productId Specific product ID from partner offer
-     * @param string|null $returnUrl URL to redirect customer after payment completion
+     * @param  Customer  $customer  Customer details
+     * @param  list<OrderItem>  $items  Order items
+     * @param  int  $installments  Number of installments
+     * @param  string  $callbackUrl  URL for webhook notifications
+     * @param  string|null  $externalRef  Your order reference ID
+     * @param  string|null  $productId  Specific product ID from partner offer
+     * @param  string|null  $returnUrl  URL to redirect customer after payment completion
+     * @param  list<string>  $acceptedConsents  Accepted consent identifiers
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -90,6 +94,7 @@ final class TransactionApi
         ?string $externalRef = null,
         ?string $productId = null,
         ?string $returnUrl = null,
+        array $acceptedConsents = [],
     ): Transaction {
         if (count($items) === 0) {
             throw ValidationException::missingField('items');
@@ -105,7 +110,8 @@ final class TransactionApi
             $callbackUrl,
             $externalRef,
             $productId,
-            $returnUrl
+            $returnUrl,
+            $acceptedConsents
         );
 
         $response = $this->client->post(self::CREATE_TRANSACTION_PATH, $payload);
@@ -114,8 +120,8 @@ final class TransactionApi
     }
 
     /**
-     * @param list<OrderItem> $items
-     *
+     * @param  list<OrderItem>  $items
+     * @param  list<string>  $acceptedConsents
      * @return array<string, mixed>
      */
     private function buildPayload(
@@ -126,27 +132,38 @@ final class TransactionApi
         ?string $externalRef,
         ?string $productId,
         ?string $returnUrl,
+        array $acceptedConsents,
     ): array {
         $payload = [
             'customer' => $customer->toArray(),
-            'items' => array_map(
-                static fn (OrderItem $item): array => $item->toArray(),
-                $items
-            ),
-            'installmentsNumber' => $installments,
-            'callbackUrl' => $callbackUrl,
+            'order' => [
+                'callbackUrl' => $callbackUrl,
+                'acceptedConsents' => $acceptedConsents,
+            ],
+            'offer' => [
+                'installmentsNumber' => $installments,
+            ],
         ];
 
+        if (count($items) === 1) {
+            $payload['order']['item'] = $items[0]->toArray();
+        } else {
+            $payload['order']['items'] = array_map(
+                static fn (OrderItem $item): array => $item->toArray(),
+                $items
+            );
+        }
+
         if ($externalRef !== null) {
-            $payload['externalRef'] = $externalRef;
+            $payload['order']['externalRef'] = $externalRef;
         }
 
         if ($productId !== null) {
-            $payload['productId'] = $productId;
+            $payload['offer']['productId'] = $productId;
         }
 
         if ($returnUrl !== null) {
-            $payload['returnUrl'] = $returnUrl;
+            $payload['order']['returnUrl'] = $returnUrl;
         }
 
         return $payload;
@@ -163,18 +180,6 @@ final class TransactionApi
                 'Installments must be at least 1.'
             );
         }
-
-        // Common installment options
-        $validInstallments = [1, 3, 6, 9, 10, 12, 18, 24, 36, 48];
-        if (!in_array($installments, $validInstallments, true)) {
-            throw ValidationException::invalidField(
-                'installments',
-                sprintf(
-                    'Invalid installments number. Valid options: %s.',
-                    implode(', ', $validInstallments)
-                )
-            );
-        }
     }
 
     /**
@@ -186,14 +191,14 @@ final class TransactionApi
             throw ValidationException::missingField('callbackUrl');
         }
 
-        if (!filter_var($callbackUrl, FILTER_VALIDATE_URL)) {
+        if (! filter_var($callbackUrl, FILTER_VALIDATE_URL)) {
             throw ValidationException::invalidField(
                 'callbackUrl',
                 'Must be a valid URL.'
             );
         }
 
-        if (!str_starts_with($callbackUrl, 'https://')) {
+        if (! str_starts_with($callbackUrl, 'https://')) {
             throw ValidationException::invalidField(
                 'callbackUrl',
                 'Must use HTTPS protocol.'

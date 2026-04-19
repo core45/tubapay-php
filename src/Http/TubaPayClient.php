@@ -165,28 +165,57 @@ final class TubaPayClient
      */
     public function request(string $method, string $path, array $options = []): array
     {
+        return $this->sendRequest($method, $path, $options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $options  Guzzle request options
+     * @return array<string, mixed>
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     */
+    private function sendRequest(string $method, string $path, array $options = [], bool $retryOnUnauthorized = true): array
+    {
         $url = $this->buildUrl($path);
         $token = $this->tokenManager->getAccessToken();
 
-        $options['headers'] = array_merge($options['headers'] ?? [], [
+        $requestOptions = $options;
+        $requestOptions['headers'] = array_merge($requestOptions['headers'] ?? [], [
             'Authorization' => 'Bearer '.$token,
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
         ]);
 
         try {
-            $response = $this->httpClient->request($method, $url, $options);
+            $response = $this->httpClient->request($method, $url, $requestOptions);
             $body = (string) $response->getBody();
             $data = json_decode($body, true);
 
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 return [];
+            }
+
+            if ($this->responseDataIsUnauthorized($data)) {
+                $this->tokenManager->clearToken();
+
+                if (! $retryOnUnauthorized) {
+                    throw AuthenticationException::tokenExpired();
+                }
+
+                return $this->sendRequest($method, $path, $options, false);
             }
 
             return $data;
         } catch (ConnectException $e) {
             throw ApiException::connectionError($e->getMessage());
         } catch (RequestException $e) {
+            if ($retryOnUnauthorized && $this->requestExceptionIsUnauthorized($e)) {
+                $this->tokenManager->clearToken();
+
+                return $this->sendRequest($method, $path, $options, false);
+            }
+
             return $this->handleRequestException($e, $path);
         } catch (GuzzleException $e) {
             throw ApiException::connectionError($e->getMessage());
@@ -257,5 +286,27 @@ final class TubaPayClient
         }
 
         throw ApiException::fromResponse($responseData, $statusCode, $path);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function responseDataIsUnauthorized(array $data): bool
+    {
+        $status = $data['status'] ?? null;
+        $error = $data['error'] ?? null;
+
+        if ((string) $status === '401') {
+            return true;
+        }
+
+        return is_string($error) && strcasecmp($error, 'Unauthorized') === 0;
+    }
+
+    private function requestExceptionIsUnauthorized(RequestException $e): bool
+    {
+        $response = $e->getResponse();
+
+        return $response !== null && $response->getStatusCode() === 401;
     }
 }

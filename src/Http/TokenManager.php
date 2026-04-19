@@ -78,16 +78,18 @@ final class TokenManager
             $body = (string) $response->getBody();
             $data = json_decode($body, true);
 
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 $this->logger?->error('TubaPay: Invalid token response format', [
                     'response_body' => $body,
                 ]);
                 throw AuthenticationException::invalidCredentials('Invalid response format from token endpoint');
             }
 
+            $accessToken = $this->parseTokenResponse($data);
+
             $this->logger?->debug('TubaPay: OAuth token obtained successfully');
 
-            return $this->parseTokenResponse($data);
+            return $accessToken;
         } catch (RequestException $e) {
             $this->handleRequestException($e);
         } catch (GuzzleException $e) {
@@ -135,19 +137,53 @@ final class TokenManager
      */
     private function parseTokenResponse(array $data): string
     {
-        // Response structure: {"result":{"response":{"accessToken":"...","expiresIn":86400}}}
+        // Supports both SDK and official plugin response structures.
         $response = $data['result']['response'] ?? $data;
 
-        $accessToken = $response['accessToken'] ?? null;
-        $expiresIn = $response['expiresIn'] ?? 3600;
+        if (! is_array($response)) {
+            throw AuthenticationException::invalidCredentials('Invalid response format from token endpoint');
+        }
 
-        if (!is_string($accessToken) || empty($accessToken)) {
+        $accessToken = $response['accessToken'] ?? $response['token'] ?? null;
+        $expiresIn = $this->extractExpiresIn($response);
+
+        if (! is_string($accessToken) || empty($accessToken)) {
             throw AuthenticationException::invalidCredentials('No access token in response');
         }
 
         $this->tokenStorage->setToken($accessToken, (int) $expiresIn);
 
         return $accessToken;
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function extractExpiresIn(array $response): int
+    {
+        $expiresIn = $response['expiresIn'] ?? null;
+
+        if (is_numeric($expiresIn)) {
+            return max(0, (int) $expiresIn);
+        }
+
+        $expires = $response['expires'] ?? null;
+
+        if (is_numeric($expires)) {
+            $expires = (int) $expires;
+
+            return $expires > time() ? $expires - time() : max(0, $expires);
+        }
+
+        if (is_string($expires) && $expires !== '') {
+            $timestamp = strtotime(substr($expires, 0, 19));
+
+            if ($timestamp !== false) {
+                return max(0, $timestamp - time());
+            }
+        }
+
+        return 3600;
     }
 
     /**

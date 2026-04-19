@@ -28,10 +28,10 @@ final class OfferApi
     /**
      * Create an offer to get available installment options.
      *
-     * @param float $amount Total order amount (must be within partner's configured limits)
-     * @param Customer $customer Customer details
-     * @param OrderItem $item Order item details
-     * @param string|null $externalRef Your order reference ID (optional but recommended)
+     * @param  float  $amount  Total order amount (must be within partner's configured limits)
+     * @param  Customer  $customer  Customer details
+     * @param  OrderItem  $item  Order item details
+     * @param  string|null  $externalRef  Your order reference ID (optional but recommended)
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -45,14 +45,7 @@ final class OfferApi
     ): Offer {
         $this->validateAmount($amount);
 
-        $payload = [
-            'customer' => $customer->toArray(),
-            'items' => [$item->toArray()],
-        ];
-
-        if ($externalRef !== null) {
-            $payload['externalRef'] = $externalRef;
-        }
+        $payload = $this->buildClientOfferPayload($amount);
 
         $response = $this->client->post(self::CREATE_OFFER_PATH, $payload);
 
@@ -62,9 +55,9 @@ final class OfferApi
     /**
      * Create an offer with multiple items.
      *
-     * @param Customer $customer Customer details
-     * @param list<OrderItem> $items Order items
-     * @param string|null $externalRef Your order reference ID
+     * @param  Customer  $customer  Customer details
+     * @param  list<OrderItem>  $items  Order items
+     * @param  string|null  $externalRef  Your order reference ID
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -86,17 +79,7 @@ final class OfferApi
 
         $this->validateAmount($totalAmount);
 
-        $payload = [
-            'customer' => $customer->toArray(),
-            'items' => array_map(
-                static fn (OrderItem $item): array => $item->toArray(),
-                $items
-            ),
-        ];
-
-        if ($externalRef !== null) {
-            $payload['externalRef'] = $externalRef;
-        }
+        $payload = $this->buildClientOfferPayload($totalAmount);
 
         $response = $this->client->post(self::CREATE_OFFER_PATH, $payload);
 
@@ -111,5 +94,16 @@ final class OfferApi
         if ($amount <= 0) {
             throw ValidationException::invalidField('amount', 'Amount must be greater than 0.');
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildClientOfferPayload(float $amount): array
+    {
+        return [
+            'totalValue' => $amount,
+            'type' => 'client',
+        ];
     }
 }

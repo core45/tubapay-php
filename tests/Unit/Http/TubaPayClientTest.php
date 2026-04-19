@@ -99,7 +99,7 @@ final class TubaPayClientTest extends TestCase
         $handlerStack->push($history);
 
         $httpClient = new Client(['handler' => $handlerStack]);
-        $storage = new InMemoryTokenStorage();
+        $storage = new InMemoryTokenStorage;
         $client = new TubaPayClient(
             'client-id',
             'client-secret',
@@ -148,6 +148,10 @@ final class TubaPayClientTest extends TestCase
             new Response(401, [], json_encode([
                 'error' => 'token_expired',
             ], JSON_THROW_ON_ERROR)),
+            $this->createTokenResponse('refreshed-token'),
+            new Response(401, [], json_encode([
+                'error' => 'token_expired',
+            ], JSON_THROW_ON_ERROR)),
         ]);
 
         $client = $this->createClient($mockHandler);
@@ -155,6 +159,71 @@ final class TubaPayClientTest extends TestCase
         $this->expectException(AuthenticationException::class);
 
         $client->get('/api/v1/protected');
+    }
+
+    #[Test]
+    public function test_retries_once_after_unauthorized_response(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse('expired-token'),
+            new Response(401, [], json_encode([
+                'error' => 'token_expired',
+            ], JSON_THROW_ON_ERROR)),
+            $this->createTokenResponse('fresh-token'),
+            new Response(200, [], json_encode([
+                'result' => ['response' => ['ok' => true]],
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $httpClient = new Client(['handler' => $handlerStack]);
+        $client = new TubaPayClient(
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+            $httpClient,
+        );
+
+        $result = $client->get('/api/v1/protected');
+
+        $this->assertTrue($result['result']['response']['ok']);
+        $this->assertCount(4, $container);
+
+        /** @var Request $firstApiRequest */
+        $firstApiRequest = $container[1]['request'];
+        /** @var Request $secondApiRequest */
+        $secondApiRequest = $container[3]['request'];
+
+        $this->assertSame('Bearer expired-token', $firstApiRequest->getHeaderLine('Authorization'));
+        $this->assertSame('Bearer fresh-token', $secondApiRequest->getHeaderLine('Authorization'));
+    }
+
+    #[Test]
+    public function test_retries_once_after_unauthorized_response_body(): void
+    {
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse('expired-token'),
+            new Response(200, [], json_encode([
+                'status' => '401',
+                'error' => 'Unauthorized',
+            ], JSON_THROW_ON_ERROR)),
+            $this->createTokenResponse('fresh-token'),
+            new Response(200, [], json_encode([
+                'result' => ['response' => ['ok' => true]],
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $client = $this->createClient($mockHandler);
+
+        $result = $client->get('/api/v1/protected');
+
+        $this->assertTrue($result['result']['response']['ok']);
     }
 
     #[Test]
@@ -282,17 +351,17 @@ final class TubaPayClientTest extends TestCase
             'client-id',
             'client-secret',
             Environment::Test,
-            new InMemoryTokenStorage(),
+            new InMemoryTokenStorage,
             $httpClient,
         );
     }
 
-    private function createTokenResponse(): Response
+    private function createTokenResponse(string $token = 'test-token'): Response
     {
         return new Response(200, [], json_encode([
             'result' => [
                 'response' => [
-                    'accessToken' => 'test-token',
+                    'accessToken' => $token,
                     'expiresIn' => 86400,
                 ],
             ],
