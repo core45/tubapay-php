@@ -65,6 +65,48 @@ final class OfferApiTest extends TestCase
     }
 
     #[Test]
+    public function test_create_client_offer_returns_offer(): void
+    {
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createOfferResponse(),
+        ]);
+
+        $api = $this->createOfferApi($mockHandler);
+
+        $offer = $api->createClientOffer(1000.0);
+
+        $this->assertInstanceOf(Offer::class, $offer);
+        $this->assertSame([3, 6, 9, 12], $offer->getAvailableInstallments());
+    }
+
+    #[Test]
+    public function test_get_installment_numbers_returns_offer_installments(): void
+    {
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createOfferResponse(),
+        ]);
+
+        $api = $this->createOfferApi($mockHandler);
+
+        $this->assertSame([3, 6, 9, 12], $api->getInstallmentNumbers(1000.0));
+    }
+
+    #[Test]
+    public function test_is_available_for_amount_returns_true_when_installments_exist(): void
+    {
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createOfferResponse(),
+        ]);
+
+        $api = $this->createOfferApi($mockHandler);
+
+        $this->assertTrue($api->isAvailableForAmount(1000.0));
+    }
+
+    #[Test]
     public function test_create_offer_sends_current_plugin_payload_shape(): void
     {
         $container = [];
@@ -224,6 +266,13 @@ final class OfferApiTest extends TestCase
                             ['installmentsNumber' => 6],
                             ['installmentsNumber' => 9],
                             ['installmentsNumber' => 12],
+                        ],
+                        'consents' => [
+                            [
+                                'type' => 'RODO_BP',
+                                'title' => 'Required consent',
+                                'optional' => false,
+                            ],
                         ],
                     ],
                 ],

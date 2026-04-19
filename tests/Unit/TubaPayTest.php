@@ -4,21 +4,29 @@ declare(strict_types=1);
 
 namespace Core45\TubaPay\Tests\Unit;
 
+use Core45\TubaPay\Api\ContentApi;
 use Core45\TubaPay\Api\OfferApi;
 use Core45\TubaPay\Api\TransactionApi;
+use Core45\TubaPay\Api\UiTextApi;
 use Core45\TubaPay\DTO\Webhook\StatusChangedPayload;
 use Core45\TubaPay\Enum\Environment;
 use Core45\TubaPay\Exception\WebhookVerificationException;
 use Core45\TubaPay\Http\TubaPayClient;
 use Core45\TubaPay\Security\SignatureVerifier;
 use Core45\TubaPay\TubaPay;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 final class TubaPayTest extends TestCase
 {
     private const CLIENT_ID = 'test-client-id';
+
     private const CLIENT_SECRET = 'test-client-secret';
+
     private const WEBHOOK_SECRET = 'test-webhook-secret';
 
     #[Test]
@@ -114,6 +122,62 @@ final class TubaPayTest extends TestCase
         $transactions2 = $tubapay->transactions();
 
         $this->assertSame($transactions1, $transactions2);
+    }
+
+    #[Test]
+    public function test_ui_texts_returns_same_instance(): void
+    {
+        $tubapay = TubaPay::create(
+            clientId: self::CLIENT_ID,
+            clientSecret: self::CLIENT_SECRET,
+            webhookSecret: self::WEBHOOK_SECRET,
+        );
+
+        $texts1 = $tubapay->uiTexts();
+        $texts2 = $tubapay->uiTexts();
+
+        $this->assertInstanceOf(UiTextApi::class, $texts1);
+        $this->assertSame($texts1, $texts2);
+    }
+
+    #[Test]
+    public function test_content_returns_same_instance(): void
+    {
+        $tubapay = TubaPay::create(
+            clientId: self::CLIENT_ID,
+            clientSecret: self::CLIENT_SECRET,
+            webhookSecret: self::WEBHOOK_SECRET,
+        );
+
+        $content1 = $tubapay->content();
+        $content2 = $tubapay->content();
+
+        $this->assertInstanceOf(ContentApi::class, $content1);
+        $this->assertSame($content1, $content2);
+    }
+
+    #[Test]
+    public function test_check_connection_returns_successful_status(): void
+    {
+        $mockHandler = new MockHandler([
+            new Response(200, [], json_encode([
+                'token' => 'plugin-token',
+                'refreshToken' => 'plugin-refresh-token',
+                'expires' => date('Y-m-d H:i:s', time() + 86400),
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $tubapay = TubaPay::create(
+            clientId: self::CLIENT_ID,
+            clientSecret: self::CLIENT_SECRET,
+            webhookSecret: self::WEBHOOK_SECRET,
+            httpClient: new Client(['handler' => HandlerStack::create($mockHandler)]),
+        );
+
+        $status = $tubapay->checkConnection();
+
+        $this->assertTrue($status->successful);
+        $this->assertSame('plugin-token', $status->token?->accessToken);
     }
 
     #[Test]

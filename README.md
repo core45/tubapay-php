@@ -20,6 +20,8 @@ use Core45\TubaPay\TubaPay;
 use Core45\TubaPay\Enum\Environment;
 use Core45\TubaPay\DTO\Customer;
 use Core45\TubaPay\DTO\OrderItem;
+use Core45\TubaPay\DTO\CheckoutSelection;
+use Core45\TubaPay\DTO\TransactionMetadata;
 
 // Create SDK instance
 $tubapay = TubaPay::create(
@@ -47,15 +49,11 @@ $item = new OrderItem(
 );
 
 // 1. Get available installment options
-$offer = $tubapay->offers()->createOffer(
-    amount: 1000.00,
-    customer: $customer,
-    item: $item,
-    externalRef: 'ORDER-123',
-);
+$offer = $tubapay->offers()->createClientOffer(1000.00);
 
 // Check available installments
 $installments = $offer->getAvailableInstallments(); // [3, 6, 9, 12]
+$requiredConsents = $offer->getRequiredConsentTypes(); // e.g. ['RODO_BP']
 
 // 2. Create transaction with selected installments
 $transaction = $tubapay->transactions()->createTransaction(
@@ -64,6 +62,8 @@ $transaction = $tubapay->transactions()->createTransaction(
     installments: 6,
     callbackUrl: 'https://yoursite.com/webhook',
     externalRef: 'ORDER-123',
+    returnUrl: 'https://yoursite.com/checkout/thanks',
+    acceptedConsents: ['RODO_BP'],
 );
 
 // Redirect customer to payment page
@@ -73,6 +73,53 @@ header('Location: ' . $transaction->transactionLink);
 ## Authentication
 
 The SDK authenticates with the TubaPay partner token endpoint using `clientId`, `clientSecret`, and the required `PARTNER_CLIENT_CREDENTIALS` grant type. This grant type is sent automatically when the SDK refreshes an access token.
+
+You can also explicitly check credentials:
+
+```php
+$status = $tubapay->checkConnection();
+
+if (! $status->successful) {
+    throw new RuntimeException($status->message);
+}
+```
+
+## Checkout Helpers
+
+The SDK exposes the current TubaPay v2 checkout surfaces used by the official WooCommerce plugin:
+
+```php
+$offer = $tubapay->offers()->createClientOffer(1000.00);
+$installments = $tubapay->offers()->getInstallmentNumbers(1000.00);
+$available = $tubapay->offers()->isAvailableForAmount(1000.00);
+
+$uiTexts = $tubapay->uiTexts()->getTexts();
+$topBar = $tubapay->content()->topBar();
+$popup = $tubapay->content()->popup();
+```
+
+Create a transaction from a checkout selection:
+
+```php
+$selection = new CheckoutSelection(
+    installments: 12,
+    acceptedConsents: ['RODO_BP'],
+    returnUrl: 'https://yoursite.com/checkout/thanks',
+    metadata: TransactionMetadata::forIntegration(
+        source: 'custom-shop',
+        appVersion: 'custom-integration',
+        appDetailedVersion: '1.0.0',
+    ),
+);
+
+$transaction = $tubapay->transactions()->createTransactionFromSelection(
+    customer: $customer,
+    items: [$item],
+    callbackUrl: 'https://yoursite.com/webhook',
+    selection: $selection,
+    externalRef: 'ORDER-123',
+);
+```
 
 ## Webhook Handling
 

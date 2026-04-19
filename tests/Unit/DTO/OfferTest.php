@@ -29,6 +29,18 @@ final class OfferTest extends TestCase
                             ['installmentsNumber' => 9],
                             ['installmentsNumber' => 12],
                         ],
+                        'consents' => [
+                            [
+                                'type' => 'RODO_BP',
+                                'title' => 'Required consent',
+                                'optional' => false,
+                            ],
+                            [
+                                'type' => 'MARKETING',
+                                'title' => 'Marketing consent',
+                                'optional' => true,
+                            ],
+                        ],
                     ],
                 ],
             ],
@@ -42,6 +54,8 @@ final class OfferTest extends TestCase
         $this->assertSame('client', $offer->type);
         $this->assertSame(1000.0, $offer->totalValue);
         $this->assertCount(4, $offer->items);
+        $this->assertCount(2, $offer->consents);
+        $this->assertSame(['RODO_BP'], $offer->getRequiredConsentTypes());
     }
 
     #[Test]

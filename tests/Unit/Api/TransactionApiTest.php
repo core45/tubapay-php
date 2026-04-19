@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Core45\TubaPay\Tests\Unit\Api;
 
 use Core45\TubaPay\Api\TransactionApi;
+use Core45\TubaPay\DTO\CheckoutSelection;
 use Core45\TubaPay\DTO\Customer;
 use Core45\TubaPay\DTO\OrderItem;
 use Core45\TubaPay\DTO\Transaction;
+use Core45\TubaPay\DTO\TransactionMetadata;
 use Core45\TubaPay\Enum\Environment;
 use Core45\TubaPay\Exception\ValidationException;
 use Core45\TubaPay\Http\InMemoryTokenStorage;
@@ -140,6 +142,100 @@ final class TransactionApiTest extends TestCase
                 'installmentsNumber' => 6,
             ],
         ], $payload);
+    }
+
+    #[Test]
+    public function test_create_transaction_sends_transaction_metadata(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createTransactionResponse(),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $httpClient = new Client(['handler' => $handlerStack]);
+        $client = new TubaPayClient(
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+            $httpClient,
+        );
+        $api = new TransactionApi($client);
+
+        $api->createTransaction(
+            customer: $this->createCustomer(),
+            item: $this->createOrderItem(1000.0),
+            installments: 6,
+            callbackUrl: 'https://example.com/webhook',
+            externalRef: 'ORDER-123',
+            metadata: new TransactionMetadata(
+                appVersion: 'app-version',
+                appDetailedVersion: '0.2.0',
+                source: 'php-sdk',
+            ),
+        );
+
+        /** @var Request $request */
+        $request = $container[1]['request'];
+        $payload = json_decode((string) $request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame('app-version', $payload['order']['appVersion']);
+        $this->assertSame('0.2.0', $payload['order']['appDetailedVersion']);
+        $this->assertSame('php-sdk', $payload['order']['source']);
+    }
+
+    #[Test]
+    public function test_create_transaction_from_selection_uses_checkout_selection(): void
+    {
+        $container = [];
+        $history = Middleware::history($container);
+
+        $mockHandler = new MockHandler([
+            $this->createTokenResponse(),
+            $this->createTransactionResponse(),
+        ]);
+
+        $handlerStack = HandlerStack::create($mockHandler);
+        $handlerStack->push($history);
+
+        $httpClient = new Client(['handler' => $handlerStack]);
+        $client = new TubaPayClient(
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+            $httpClient,
+        );
+        $api = new TransactionApi($client);
+
+        $transaction = $api->createTransactionFromSelection(
+            customer: $this->createCustomer(),
+            items: [$this->createOrderItem(1000.0)],
+            callbackUrl: 'https://example.com/webhook',
+            selection: new CheckoutSelection(
+                installments: 12,
+                acceptedConsents: ['RODO_BP'],
+                returnUrl: 'https://example.com/return',
+                metadata: TransactionMetadata::forIntegration('php-sdk'),
+            ),
+            externalRef: 'ORDER-123',
+        );
+
+        /** @var Request $request */
+        $request = $container[1]['request'];
+        $payload = json_decode((string) $request->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertInstanceOf(Transaction::class, $transaction);
+        $this->assertSame(12, $payload['offer']['installmentsNumber']);
+        $this->assertSame(['RODO_BP'], $payload['order']['acceptedConsents']);
+        $this->assertSame('https://example.com/return', $payload['order']['returnUrl']);
+        $this->assertSame('php-sdk', $payload['order']['source']);
     }
 
     #[Test]

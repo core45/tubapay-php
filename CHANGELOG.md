@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-04-19
+
+### Fixed
+
+- Moved `InvoicePosition` to its own PSR-4 autoloadable file so downstream packages can type-discover recurring invoice position DTOs.
+
+## [0.2.0] - 2026-04-19
+
+### Added
+
+- Added consent DTO parsing on offers.
+- Added UI text and content APIs for checkout labels, top bar content, and popup content.
+- Added transaction metadata support matching the official WooCommerce plugin fields.
+- Added checkout selection DTO and transaction creation from selected installments and consents.
+- Added token response metadata and SDK connection checks.
+- Added amount-only client offer helpers for available installment discovery.
+
 ## [0.1.2] - 2026-04-19
 
 ### Fixed

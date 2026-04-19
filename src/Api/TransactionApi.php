@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Core45\TubaPay\Api;
 
+use Core45\TubaPay\DTO\CheckoutSelection;
 use Core45\TubaPay\DTO\Customer;
 use Core45\TubaPay\DTO\OrderItem;
 use Core45\TubaPay\DTO\Transaction;
+use Core45\TubaPay\DTO\TransactionMetadata;
 use Core45\TubaPay\Exception\ApiException;
 use Core45\TubaPay\Exception\AuthenticationException;
 use Core45\TubaPay\Exception\ValidationException;
@@ -36,6 +38,7 @@ final class TransactionApi
      * @param  string|null  $productId  Specific product ID from partner offer (optional)
      * @param  string|null  $returnUrl  URL to redirect customer after payment completion
      * @param  list<string>  $acceptedConsents  Accepted consent identifiers
+     * @param  TransactionMetadata|null  $metadata  Integration metadata
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -50,6 +53,7 @@ final class TransactionApi
         ?string $productId = null,
         ?string $returnUrl = null,
         array $acceptedConsents = [],
+        ?TransactionMetadata $metadata = null,
     ): Transaction {
         $this->validateInstallments($installments);
         $this->validateCallbackUrl($callbackUrl);
@@ -62,7 +66,8 @@ final class TransactionApi
             $externalRef,
             $productId,
             $returnUrl,
-            $acceptedConsents
+            $acceptedConsents,
+            $metadata
         );
 
         $response = $this->client->post(self::CREATE_TRANSACTION_PATH, $payload);
@@ -81,6 +86,7 @@ final class TransactionApi
      * @param  string|null  $productId  Specific product ID from partner offer
      * @param  string|null  $returnUrl  URL to redirect customer after payment completion
      * @param  list<string>  $acceptedConsents  Accepted consent identifiers
+     * @param  TransactionMetadata|null  $metadata  Integration metadata
      *
      * @throws ApiException
      * @throws AuthenticationException
@@ -95,6 +101,7 @@ final class TransactionApi
         ?string $productId = null,
         ?string $returnUrl = null,
         array $acceptedConsents = [],
+        ?TransactionMetadata $metadata = null,
     ): Transaction {
         if (count($items) === 0) {
             throw ValidationException::missingField('items');
@@ -111,12 +118,46 @@ final class TransactionApi
             $externalRef,
             $productId,
             $returnUrl,
-            $acceptedConsents
+            $acceptedConsents,
+            $metadata
         );
 
         $response = $this->client->post(self::CREATE_TRANSACTION_PATH, $payload);
 
         return Transaction::fromArray($response);
+    }
+
+    /**
+     * Create a transaction from a checkout selection DTO.
+     *
+     * @param  Customer  $customer  Customer details
+     * @param  list<OrderItem>  $items  Order items
+     * @param  string  $callbackUrl  URL for webhook notifications
+     * @param  CheckoutSelection  $selection  User checkout choices
+     * @param  string|null  $externalRef  Your order reference ID
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function createTransactionFromSelection(
+        Customer $customer,
+        array $items,
+        string $callbackUrl,
+        CheckoutSelection $selection,
+        ?string $externalRef = null,
+    ): Transaction {
+        return $this->createTransactionWithItems(
+            customer: $customer,
+            items: $items,
+            installments: $selection->installments,
+            callbackUrl: $callbackUrl,
+            externalRef: $externalRef,
+            productId: null,
+            returnUrl: $selection->returnUrl,
+            acceptedConsents: $selection->acceptedConsents,
+            metadata: $selection->metadata,
+        );
     }
 
     /**
@@ -133,6 +174,7 @@ final class TransactionApi
         ?string $productId,
         ?string $returnUrl,
         array $acceptedConsents,
+        ?TransactionMetadata $metadata,
     ): array {
         $payload = [
             'customer' => $customer->toArray(),
@@ -164,6 +206,10 @@ final class TransactionApi
 
         if ($returnUrl !== null) {
             $payload['order']['returnUrl'] = $returnUrl;
+        }
+
+        if ($metadata !== null) {
+            $payload['order'] = array_merge($payload['order'], $metadata->toArray());
         }
 
         return $payload;

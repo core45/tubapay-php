@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Core45\TubaPay\Http;
 
+use Core45\TubaPay\DTO\TokenResponse;
 use Core45\TubaPay\Enum\Environment;
 use Core45\TubaPay\Exception\AuthenticationException;
 use GuzzleHttp\ClientInterface;
@@ -53,6 +54,16 @@ final class TokenManager
      */
     public function refreshToken(): string
     {
+        return $this->requestToken()->accessToken;
+    }
+
+    /**
+     * Force refresh the access token and return token metadata.
+     *
+     * @throws AuthenticationException If authentication fails
+     */
+    public function requestToken(): TokenResponse
+    {
         $this->validateCredentials();
 
         $tokenUrl = $this->getTokenUrl();
@@ -85,11 +96,11 @@ final class TokenManager
                 throw AuthenticationException::invalidCredentials('Invalid response format from token endpoint');
             }
 
-            $accessToken = $this->parseTokenResponse($data);
+            $tokenResponse = $this->parseTokenResponse($data);
 
             $this->logger?->debug('TubaPay: OAuth token obtained successfully');
 
-            return $accessToken;
+            return $tokenResponse;
         } catch (RequestException $e) {
             $this->handleRequestException($e);
         } catch (GuzzleException $e) {
@@ -135,7 +146,7 @@ final class TokenManager
      *
      * @throws AuthenticationException
      */
-    private function parseTokenResponse(array $data): string
+    private function parseTokenResponse(array $data): TokenResponse
     {
         // Supports both SDK and official plugin response structures.
         $response = $data['result']['response'] ?? $data;
@@ -144,46 +155,15 @@ final class TokenManager
             throw AuthenticationException::invalidCredentials('Invalid response format from token endpoint');
         }
 
-        $accessToken = $response['accessToken'] ?? $response['token'] ?? null;
-        $expiresIn = $this->extractExpiresIn($response);
+        $tokenResponse = TokenResponse::fromArray($data);
 
-        if (! is_string($accessToken) || empty($accessToken)) {
+        if ($tokenResponse->accessToken === '') {
             throw AuthenticationException::invalidCredentials('No access token in response');
         }
 
-        $this->tokenStorage->setToken($accessToken, (int) $expiresIn);
+        $this->tokenStorage->setToken($tokenResponse->accessToken, $tokenResponse->expiresIn);
 
-        return $accessToken;
-    }
-
-    /**
-     * @param  array<string, mixed>  $response
-     */
-    private function extractExpiresIn(array $response): int
-    {
-        $expiresIn = $response['expiresIn'] ?? null;
-
-        if (is_numeric($expiresIn)) {
-            return max(0, (int) $expiresIn);
-        }
-
-        $expires = $response['expires'] ?? null;
-
-        if (is_numeric($expires)) {
-            $expires = (int) $expires;
-
-            return $expires > time() ? $expires - time() : max(0, $expires);
-        }
-
-        if (is_string($expires) && $expires !== '') {
-            $timestamp = strtotime(substr($expires, 0, 19));
-
-            if ($timestamp !== false) {
-                return max(0, $timestamp - time());
-            }
-        }
-
-        return 3600;
+        return $tokenResponse;
     }
 
     /**

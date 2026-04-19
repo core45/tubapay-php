@@ -10,7 +10,8 @@ namespace Core45\TubaPay\DTO;
 readonly class Offer
 {
     /**
-     * @param list<OfferItem> $items Available installment options
+     * @param  list<OfferItem>  $items  Available installment options
+     * @param  list<Consent>  $consents  Required and optional checkout consents
      */
     public function __construct(
         public string $referenceId,
@@ -19,12 +20,13 @@ readonly class Offer
         public string $type,
         public float $totalValue,
         public array $items,
+        public array $consents = [],
     ) {}
 
     /**
      * Create from API response array.
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {
@@ -38,6 +40,13 @@ readonly class Offer
             }
         }
 
+        $consents = [];
+        foreach (($offer['consents'] ?? []) as $consentData) {
+            if (is_array($consentData)) {
+                $consents[] = Consent::fromArray($consentData);
+            }
+        }
+
         return new self(
             referenceId: (string) ($response['referenceId'] ?? ''),
             partnerId: (string) ($offer['partnerId'] ?? ''),
@@ -45,6 +54,7 @@ readonly class Offer
             type: (string) ($offer['type'] ?? 'client'),
             totalValue: (float) ($offer['totalValue'] ?? 0.0),
             items: $items,
+            consents: $consents,
         );
     }
 
@@ -81,6 +91,24 @@ readonly class Offer
     public function hasInstallmentOption(int $installmentsNumber): bool
     {
         return $this->findByInstallments($installmentsNumber) !== null;
+    }
+
+    /**
+     * Get required consent identifiers.
+     *
+     * @return list<string>
+     */
+    public function getRequiredConsentTypes(): array
+    {
+        $types = [];
+
+        foreach ($this->consents as $consent) {
+            if ($consent->isRequired()) {
+                $types[] = $consent->type;
+            }
+        }
+
+        return $types;
     }
 
     /**

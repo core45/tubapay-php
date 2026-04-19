@@ -43,6 +43,20 @@ final class OfferApi
         OrderItem $item,
         ?string $externalRef = null,
     ): Offer {
+        return $this->createClientOffer($amount);
+    }
+
+    /**
+     * Create a client-type offer using the current TubaPay v2 payload shape.
+     *
+     * @param  float  $amount  Total order amount
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function createClientOffer(float $amount): Offer
+    {
         $this->validateAmount($amount);
 
         $payload = $this->buildClientOfferPayload($amount);
@@ -77,13 +91,33 @@ final class OfferApi
             $items
         ));
 
-        $this->validateAmount($totalAmount);
+        return $this->createClientOffer($totalAmount);
+    }
 
-        $payload = $this->buildClientOfferPayload($totalAmount);
+    /**
+     * Fetch available installment numbers for an amount.
+     *
+     * @return list<int>
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function getInstallmentNumbers(float $amount): array
+    {
+        return $this->createClientOffer($amount)->getAvailableInstallments();
+    }
 
-        $response = $this->client->post(self::CREATE_OFFER_PATH, $payload);
-
-        return Offer::fromArray($response);
+    /**
+     * Check whether TubaPay has any installment option for the amount.
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function isAvailableForAmount(float $amount): bool
+    {
+        return count($this->getInstallmentNumbers($amount)) > 0;
     }
 
     /**

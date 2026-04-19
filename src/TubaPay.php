@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Core45\TubaPay;
 
+use Core45\TubaPay\Api\ContentApi;
 use Core45\TubaPay\Api\OfferApi;
 use Core45\TubaPay\Api\TransactionApi;
+use Core45\TubaPay\Api\UiTextApi;
+use Core45\TubaPay\DTO\ConnectionStatus;
 use Core45\TubaPay\DTO\Webhook\WebhookPayload;
 use Core45\TubaPay\Enum\Environment;
 use Core45\TubaPay\Exception\WebhookVerificationException;
@@ -15,6 +18,7 @@ use Core45\TubaPay\Http\TubaPayClient;
 use Core45\TubaPay\Security\SignatureVerifier;
 use GuzzleHttp\ClientInterface;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Main entry point for TubaPay SDK.
@@ -59,6 +63,10 @@ final class TubaPay
     private ?OfferApi $offerApi = null;
 
     private ?TransactionApi $transactionApi = null;
+
+    private ?UiTextApi $uiTextApi = null;
+
+    private ?ContentApi $contentApi = null;
 
     private function __construct(
         TubaPayClient $client,
@@ -130,6 +138,44 @@ final class TubaPay
     }
 
     /**
+     * Get the UI Text API for checkout labels.
+     */
+    public function uiTexts(): UiTextApi
+    {
+        if ($this->uiTextApi === null) {
+            $this->uiTextApi = new UiTextApi($this->client);
+        }
+
+        return $this->uiTextApi;
+    }
+
+    /**
+     * Get the Content API for TubaPay promotional content.
+     */
+    public function content(): ContentApi
+    {
+        if ($this->contentApi === null) {
+            $this->contentApi = new ContentApi($this->client);
+        }
+
+        return $this->contentApi;
+    }
+
+    /**
+     * Check whether credentials can authenticate against TubaPay.
+     */
+    public function checkConnection(): ConnectionStatus
+    {
+        try {
+            return ConnectionStatus::successful(
+                $this->client->getTokenManager()->requestToken()
+            );
+        } catch (Throwable $e) {
+            return ConnectionStatus::failed($e->getMessage());
+        }
+    }
+
+    /**
      * Verify a webhook signature and parse the payload.
      *
      * @param  string  $payload  Raw JSON webhook body
@@ -143,7 +189,7 @@ final class TubaPay
 
         $data = json_decode($payload, true);
 
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             throw WebhookVerificationException::emptyPayload();
         }
 
@@ -163,7 +209,7 @@ final class TubaPay
     {
         $data = json_decode($payload, true);
 
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             throw WebhookVerificationException::emptyPayload();
         }
 

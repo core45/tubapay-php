@@ -10,33 +10,6 @@ use Core45\TubaPay\Enum\AgreementStatus;
 use DateTimeImmutable;
 
 /**
- * Invoice request position (installment to be invoiced).
- */
-readonly class InvoicePosition
-{
-    public function __construct(
-        /** Installment/rate number. */
-        public int $rateNumber,
-        /** Amount for this installment. */
-        public float $totalAmount,
-        /** Payment schedule ID (optional). */
-        public ?string $paymentScheduleId = null,
-    ) {}
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    public static function fromArray(array $data): self
-    {
-        return new self(
-            rateNumber: (int) ($data['rateNumber'] ?? 0),
-            totalAmount: (float) ($data['totalAmount'] ?? 0.0),
-            paymentScheduleId: isset($data['paymentScheduleId']) ? (string) $data['paymentScheduleId'] : null,
-        );
-    }
-}
-
-/**
  * Webhook payload for CUSTOMER_RECURRING_ORDER_REQUEST events.
  *
  * Request from TubaPay to issue an invoice to the customer for their installment.
@@ -44,9 +17,9 @@ readonly class InvoicePosition
 readonly class InvoicePayload extends WebhookPayload
 {
     /**
-     * @param array<string, mixed> $rawPayload
-     * @param list<OrderItem> $items
-     * @param list<InvoicePosition> $requestPositions
+     * @param  array<string, mixed>  $rawPayload
+     * @param  list<OrderItem>  $items
+     * @param  list<InvoicePosition>  $requestPositions
      */
     public function __construct(
         string $commandType,
@@ -95,7 +68,7 @@ readonly class InvoicePayload extends WebhookPayload
     /**
      * Create from webhook payload array.
      *
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {

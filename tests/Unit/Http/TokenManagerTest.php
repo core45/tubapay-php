@@ -192,6 +192,33 @@ final class TokenManagerTest extends TestCase
     }
 
     #[Test]
+    public function test_request_token_returns_token_metadata(): void
+    {
+        $mockHandler = new MockHandler([
+            new Response(200, [], json_encode([
+                'token' => 'plugin-token',
+                'refreshToken' => 'plugin-refresh-token',
+                'expires' => date('Y-m-d H:i:s', time() + 86400),
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+
+        $client = new Client(['handler' => HandlerStack::create($mockHandler)]);
+        $manager = new TokenManager(
+            $client,
+            'client-id',
+            'client-secret',
+            Environment::Test,
+            new InMemoryTokenStorage,
+        );
+
+        $token = $manager->requestToken();
+
+        $this->assertSame('plugin-token', $token->accessToken);
+        $this->assertSame('plugin-refresh-token', $token->refreshToken);
+        $this->assertGreaterThan(86000, $token->expiresIn);
+    }
+
+    #[Test]
     public function test_throws_on_missing_credentials(): void
     {
         $mockHandler = new MockHandler([]);
