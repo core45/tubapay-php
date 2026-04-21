@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-04-21
+
+### Fixed
+
+- `TransactionApi::createTransactionWithItems()` (and `createTransactionFromSelection()`, which wraps it) now throw `ValidationException` when passed more than one `OrderItem`, instead of silently emitting an undocumented plural `order.items` payload. TubaPay's `/api/v1/external/transaction/create` endpoint accepts exactly one `order.item` with a single `totalValue` — the reference WordPress integration (`tubapay-v2`) sends `$order->get_total()` as that value. The plural path was non-functional: TubaPay returned 200 OK but rendered the resulting agreement as `0.00 zł` in the checkout form. Callers with multiple order rows must aggregate them into a single item before calling (sum `totalValue`s, use a representative name such as `"Zamówienie nr {id}"`).
+- Removed the unreachable plural branch from `TransactionApi::buildPayload()`; the method now always emits the documented singular `order.item`.
+
+### Documentation
+
+- README now documents the single-item constraint with a pointer to the WooCommerce plugin's aggregation pattern.
+
 ## [0.2.1] - 2026-04-19
 
 ### Fixed

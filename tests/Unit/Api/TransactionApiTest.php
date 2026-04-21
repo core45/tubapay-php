@@ -311,12 +311,12 @@ final class TransactionApiTest extends TestCase
     }
 
     #[Test]
-    public function test_create_transaction_with_multiple_items(): void
+    public function test_create_transaction_with_multiple_items_throws(): void
     {
-        $mockHandler = new MockHandler([
-            $this->createTokenResponse(),
-            $this->createTransactionResponse(),
-        ]);
+        // TubaPay's API accepts exactly one order.item; callers must aggregate
+        // multiple order rows into a single item before calling (see reference
+        // WordPress plugin: tubapay-wc-gateway-class.php sends $order->get_total()).
+        $mockHandler = new MockHandler([]);
 
         $api = $this->createTransactionApi($mockHandler);
 
@@ -325,15 +325,16 @@ final class TransactionApiTest extends TestCase
             $this->createOrderItem(500.0, 'Product B'),
         ];
 
-        $transaction = $api->createTransactionWithItems(
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('exactly one order.item');
+
+        $api->createTransactionWithItems(
             customer: $this->createCustomer(),
             items: $items,
             installments: 6,
             callbackUrl: 'https://example.com/webhook',
             externalRef: 'MULTI-ORDER-123',
         );
-
-        $this->assertInstanceOf(Transaction::class, $transaction);
     }
 
     #[Test]

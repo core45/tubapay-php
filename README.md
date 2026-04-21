@@ -121,6 +121,14 @@ $transaction = $tubapay->transactions()->createTransactionFromSelection(
 );
 ```
 
+> **One item per transaction.** TubaPay's `/api/v1/external/transaction/create`
+> endpoint accepts exactly one `order.item` with a single `totalValue`. The
+> reference WordPress integration (`tubapay-v2`) sends `$order->get_total()` as
+> that value. If your order has multiple rows (product + shipping, multiple
+> products, etc.), **aggregate them yourself** before calling — sum the
+> `totalValue`s and use a representative name such as `"Zamówienie nr {id}"`.
+> Passing more than one item throws `ValidationException`.
+
 ## Webhook Handling
 
 ```php

@@ -76,10 +76,17 @@ final class TransactionApi
     }
 
     /**
-     * Create a transaction with multiple items.
+     * Create a transaction with a list of items.
+     *
+     * TubaPay's `/api/v1/external/transaction/create` endpoint accepts exactly one
+     * `order.item` with a single `totalValue` — the reference WordPress integration
+     * (tubapay-v2) sends `$order->get_total()` as that value. This method therefore
+     * rejects lists longer than one element; callers with multiple order rows must
+     * aggregate them (sum `totalValue`s and choose a representative name such as
+     * "Zamówienie nr {id}") before calling.
      *
      * @param  Customer  $customer  Customer details
-     * @param  list<OrderItem>  $items  Order items
+     * @param  list<OrderItem>  $items  Must contain exactly one item
      * @param  int  $installments  Number of installments
      * @param  string  $callbackUrl  URL for webhook notifications
      * @param  string|null  $externalRef  Your order reference ID
@@ -107,6 +114,13 @@ final class TransactionApi
             throw ValidationException::missingField('items');
         }
 
+        if (count($items) > 1) {
+            throw ValidationException::invalidField(
+                'items',
+                'TubaPay accepts exactly one order.item per transaction; aggregate multiple rows (sum totalValue, use a representative name like "Zamówienie nr {id}") before calling.'
+            );
+        }
+
         $this->validateInstallments($installments);
         $this->validateCallbackUrl($callbackUrl);
 
@@ -131,7 +145,7 @@ final class TransactionApi
      * Create a transaction from a checkout selection DTO.
      *
      * @param  Customer  $customer  Customer details
-     * @param  list<OrderItem>  $items  Order items
+     * @param  list<OrderItem>  $items  Must contain exactly one item (see createTransactionWithItems)
      * @param  string  $callbackUrl  URL for webhook notifications
      * @param  CheckoutSelection  $selection  User checkout choices
      * @param  string|null  $externalRef  Your order reference ID
@@ -187,14 +201,8 @@ final class TransactionApi
             ],
         ];
 
-        if (count($items) === 1) {
-            $payload['order']['item'] = $items[0]->toArray();
-        } else {
-            $payload['order']['items'] = array_map(
-                static fn (OrderItem $item): array => $item->toArray(),
-                $items
-            );
-        }
+        // Enforced by createTransaction()/createTransactionWithItems(): exactly one item.
+        $payload['order']['item'] = $items[0]->toArray();
 
         if ($externalRef !== null) {
             $payload['order']['externalRef'] = $externalRef;
